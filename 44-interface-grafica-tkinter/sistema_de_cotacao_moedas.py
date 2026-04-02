@@ -1,17 +1,76 @@
 import tkinter as tk
 from tkinter import ttk
 from tkcalendar import DateEntry
+from tkinter.filedialog import askopenfilename
+import pandas as pd
+import requests
+from datetime import datetime
+import numpy as np
+import pprint as pp
 
-lista_moedas = ['usd', 'eu']
+baseURL ="https://economia.awesomeapi.com.br/json/"
+
+requisicao = requests.get(baseURL+"all")
+dicionario_moedas = requisicao.json()
+
+lista_moedas = list(dicionario_moedas.keys())
 
 def pegar_uma_cotacao():
-    pass
+    moeda = combobox_selecionar_moedas.get()
+    data_cotacao = calendario_moeda.get()
+    ano = data_cotacao[-4:]
+    mes =data_cotacao[3:5]
+    dia = data_cotacao[:2]
+    link = f"daily/{moeda}-BRL/?start_date={ano}{mes}{dia}&end_date={ano}{mes}{dia}"
+    fullLink = baseURL+link
+    requisicao_moeda = requests.get(fullLink)
+    cotacao = requisicao_moeda.json()
+    valor_moeda = float(cotacao[0]['bid'])
+    label_resultado_moeda['text'] = f"O fechamento cotação de {moeda} no dia {data_cotacao} foi R${valor_moeda:.2f}."
+    
 
 def selecionar_arquivo():
-    pass
+    caminho= askopenfilename(title="selecione o caminho do arquivo de moedas")
+    var_caminho_arquivo.set(caminho)
+    if caminho:
+        label_caminho_arquivo['text'] =f'Arquivo selecionado: {var_caminho_arquivo.get()}'
+    
 
 def atualizar_cotacoes():
-    pass
+    try:
+        df =pd.read_excel(var_caminho_arquivo.get())
+        moedas = df.iloc[:,0]
+        data_inicial = calendario_data_inicial.get()
+        ano_inicial= data_inicial[-4:]
+        mes_incial=data_inicial[3:5]
+        dia_inicial=data_inicial[:2]
+        data_final = calendario_data_final.get()
+        ano_final=data_final[-4:]
+        mes_final=data_final[3:5]
+        dia_final=data_final[:2]
+
+        for moeda in moedas:
+            link = f"daily/{moeda}-BRL/360?start_date={ano_inicial}{mes_incial}{dia_inicial}&end_date={ano_final}{mes_final}{dia_final}" #parece que mudaram a resposta do link, tem que por o número de respostas a ser retornada
+            fullLink = baseURL+link
+            requisicao_moeda = requests.get(fullLink)
+            cotacoes = requisicao_moeda.json()
+            for cotacao in cotacoes:
+                timestamp_recebido = int(cotacao['timestamp'])
+                bid = float(cotacao['bid'])
+                data = datetime.fromtimestamp(timestamp_recebido) #lira deu o método errado, mas com ele funcionou.
+                data = data.strftime('%d/%m/%Y') #outro vacilo do lira ou atualização da biblioteca?
+                                
+                if data not in df:
+                    df[data] = np.nan
+                
+                df.loc[df.iloc[:,0] == moeda,data] = bid
+
+        df.to_excel(var_caminho_arquivo.get())
+        label_cotacao_atualizada['text'] = "Arquivo atualizado!"
+    
+    except:
+        label_cotacao_atualizada['text'] = "Selecione o arquivo Excel em formato correto"
+
 
 janela= tk.Tk()
 janela.title("Ferramenta de cotação de moedas")
@@ -41,6 +100,7 @@ botao_pegar_cotacao.grid(row=3,column=2,padx=10,pady=10,sticky='nswe')
 ##############################
 label_cotacao_multi_moedas=tk.Label(text="cotação de várias moedas", borderwidth=2, relief='solid')
 label_cotacao_multi_moedas.grid(row=4,column=0,padx=10, pady=10,sticky='nswe', columnspan=3)
+var_caminho_arquivo = tk.StringVar()
 
 label_arquivo = tk.Label(text="Selecione um arquivo em excel com as moedas na coluna A")
 label_arquivo.grid(row=5,column=0,columnspan=2,padx=10, pady=10,sticky='nswe')
